@@ -1,12 +1,13 @@
 ---
 title: "HW2 STA521 Fall18"
-author: '[Your Name Here, netid and github username here]'
+author: '[Andrew Carr, ajc29]'
 date: "Due September 23, 2018 5pm"
 output:
   pdf_document: default
   html_document:
     df_print: paged
 ---
+
 
 ## Backgound Reading
 
@@ -24,24 +25,30 @@ This exercise involves the UN data set from `alr3` package. Install `alr3` and t
 
 0.  Preliminary read in the data.  After testing, modify the code chunk so that output, messages and warnings are suppressed.  *Exclude text from final*
 
-```{r data}
+```{r data, results="hide", warning=FALSE, message=FALSE}
 library(alr3)
 data(UN3, package="alr3")
 help(UN3) 
 library(car)
+library(ggplot2)
+library(GGally)
 ```
 
 
 1. Create a summary of the data.  How many variables have missing data?  Which are quantitative and which are qualtitative?
 
 ```{r}
-
+summary(UN3)
 ```
+
+All of these variables are quantitative.  All of the variables except for Purban have missing values.  
 
 2. What is the mean and standard deviation of each quantitative predictor?  Provide in a nicely formatted table.
 
 ```{r}
-
+thing <- rbind(apply(UN3, 2, mean, na.rm=T), apply(UN3, 2, sd, na.rm=T))
+rownames(thing) <- c("Mean", "Standard Deviation")
+knitr::kable(thing, row.names=T, digits=1)
 ```
 
 
@@ -49,53 +56,148 @@ library(car)
 highlighting the relationships among the predictors. Comment
 on your findings regarding trying to predict `ModernC` from the other variables.  Are there potential outliers, nonlinear relationships or transformations that appear to be needed based on your graphical EDA?
 
-```{r}
-
+```{r, warning = FALSE, message=FALSE}
+ggpairs(UN3,columns = c(2,3,4,5,6,7))
 ```
+
+
+The first thing to notice from these plots is that three of the predictors have right-skewed distributions: 2001 per capita GDP, the expected number of live births per female, and population.  I will likely want to log these predictors or transform them in some other way to deal with violations of the linearity assumption.  The distributions of these variables also suggest that outliers may be an issue for this analysis.  
+
+Among the scatterplots of relationships between predictors, the scatterplots in the per capita GDP column have a lot of observations clustered near the y-axis, providing further evidence of the skew of the PPgdp distribution.  The plots including population have two observations that are far away from the other observations, suggesting that the skewness of the population distribution is due to two countries.  
+
+These scatterplots also show that many of the predictors are associated with each other.  The plot of per capita GDP and percent urban shows that richer countries tend to be more urbanized, while the plot of per capita GDP and fertility indicates that richer countries tend more have lower fertility rates.  The scatterplot of percent urban and fertility shows that more urbanized nations tend to have slightly lower fertility rates.  The plot of growth rate and fertility shows that countries with higher fertility rates are growing at higher rates.  Finally, fertility and percent of adult females who are economically active appear to have a non-linear relationship.  High levels of workforce participation exist among countries with high and low fertility rates, while countries with average levels of female workforce participation have lower fertility rates.    
+
 
 ## Model Fitting
 
 4.  Use the `lm()` function to perform a multiple linear regression with `ModernC` as the response and all other variables as the predictors, using the formula `ModernC ~ .`, where the `.` includes all remaining variables in the dataframe.  Create  diagnostic residual plot from the linear model object and comment on results regarding assumptions.  How many observations are used in your model fitting?
 
 ```{r}
-
+m1 <- lm(ModernC ~ ., data = UN3)
+par(mfrow=c(2,2))
+plot(m1)
 ```
+
+The residual vs. fitted plot shows that the variance of the residuals is fairly consistent for different values of the outcome.  This indicates that this model does not suffer significantly from autocorellation or heteroskedasticity.  The negative residuals do appear to be slightly farther from 0 than the positive residuals, a sign that some of the predictors may not be linearly related to the outcome.  Log-transforming some of the predictors will likely make this fitted-residual plot more symmetric.  Moving on to the Q-Q normal plot, this plot indicates that the standardized residuals are somewhat normally distributed.  However, observations at the right end of this distribution fall below their theoretical values.  This suggests that the right tail of the distribution of standardized residuals is thinner than the right tail of a normal distribution.  This is further evidence that the assumption of linearity is violated by this model.  Finally, the Cook's distance plot shows that none of the observations have a Cook's distance greater than .5.  This indicates that we likely do not need to be concerned about outliers, although we will want to check how this plot is changed after we transform some of the predictors in this model.  
+
+This model is based on 125 observations.  Many observations from the original dataset were not used due to missing values.
 
 5. Examine added variable plots `car::avPlot` or `car::avPlots`  for your model above. Are there any plots that suggest that transformations are needed for any of the terms in the model? Describe. Is it likely that any of the localities are influential for any of the terms?  Which localities?  Which terms?  
 
 ```{r}
-
+car::avPlots(m1, id = list(method=list(abs(residuals(m1, type="pearson")), "x"), n=4, cex=1, col=carPalette()[1], location="lr"))
 ```
 
-6.  Using the Box-Tidwell  `car::boxTidwell` or graphical methods find appropriate transformations of the predictor variables to be used as predictors in the linear model.  If any predictors are negative, you may need to transform so that they are non-negative.  Describe your method and  the resulting transformations.
+The added variable plots above show the relationship between each predictor, conditional on the other predictor variables, and the outcome, conditional on the other predictor variables.  We can use these plots to evaluate if the linearity assumption is violated by the model.  We expect the residuals to be evenly distributed around the blue line.  The predictors that may violate this assumption are annual growth rate, per capita GDP, and population.  The population plot shows that two localities, China and India, have extremely high leverage.  In other words, they are extremely far from the mean of population.  Although neither of these variables is far from the regression line, their high leverage means that they may be pulling the regression line toward them, thus having high influence on the Pop term.  
+
+Per capita GDP and growth rate also also likely have non-linear relationships with the outcome.  For the growth rate ("Change") predictor, Kuwait appears to have a negative effect on the relationship between growth rate and the outcome.  This locality is influential for the Change term.  For the Per Capita GDP term, several observations appear to be influential.  Many of these appear in the lower right-hand corner of the plot.  Japan, for example, is a locality with high influence, dragging down the positive association between per capita GDP and contraceptive use. 
+
+6.  Using the Box-Tidwell  `car::boxTidwell` or graphical methods find appropriate transformations of the predictor variables to be used as predictors in the linear model.  If any predictors are negative, you may need to transform so that they are non-negative.  Describe your method and the resulting transformations.
 
 
 ```{r}
+min(UN3$Change, na.rm=T)
+UN3$Change2 <- UN3$Change + 1.11
+pm1 <- car::boxTidwell(ModernC ~ Change2, ~ PPgdp + Frate + Pop + Purban, data= UN3)
+pm2 <- car::boxTidwell(ModernC ~ Pop, ~ Change + PPgdp + Frate + Purban + Fertility, data= UN3)
+pm3 <- car::boxTidwell(ModernC ~ PPgdp, ~ Change + Pop + Frate + Purban + Fertility, data= UN3)
+
+lambda.change <- pm1$result[1,1]
+power.change <- (UN3$Change2^lambda.change - 1)/lambda.change
+
+m2 <- lm(UN3$ModernC ~ log(UN3$PPgdp) + UN3$Frate + log(UN3$Pop) + power.change + UN3$Purban + UN3$Fertility)
+car::avPlots(m2, id = list(method=list(abs(residuals(m2, type="pearson")), "x"), n=4, cex=1, col=carPalette()[1], location="lr"))
 
 ```
+In the previous problem, I used avplots to argue that three of the predictors, Change, Population, and PPgdp, may need to be transformed to account for potential violations of the linearity assumption.  Above, I run Box Tidwell to determine if power transformations of any of these predictors are necessary.  Before doing this, I transform the Change variable so that none of the observations are negative.  The minimum observed value for Change is -1.1, so I simply add 1.11 to each observation, making them positive.  After running Box Tidwell three times, once for each candidate predictor, I find evidence that a power transformation of Change may be appropriate.  The other candidates, PPgdp and Pop, do not appear to need power transformations.  Instead I log transform each of these variables.  
+
+Note that the dynamic range of the Change variable is less than 10 so this transformation may not make much of a difference.  Nonetheless, I do a power transformation of Change for the purposes of this exercise.    
+
 
 7. Given the selected transformations of the predictors, select a transformation of the response using `MASS::boxcox` or `car::boxCox` and justify.
 
-
 ```{r}
+m3 <- lm(UN3$ModernC ~ power.change + log(UN3$PPgdp) + UN3$Frate + log(UN3$Pop) + UN3$Fertility + UN3$Purban)
 
+summary(m3)
+
+bc <- MASS::boxcox(m3)
+
+lambda.y <- bc$x[which.max(bc$y)]
+power.y <- (UN3$ModernC^lambda.y - 1)/lambda.y
 ```
 
+Based on these results, I will transform the y variable using a power transformation with a lambda of approximately .79.  This is the maximum likelihood estimate of lambda obtained using the boxcox method.  
+
 8.  Fit the regression using the transformed variables.  Provide residual plots and added variables plots and comment.  If you feel that you need additional transformations of either the response or predictors, repeat any steps until you feel satisfied.
+
+```{r, warnings = F}
+
+m4 <- lm(power.y ~ log(UN3$PPgdp) + UN3$Frate + log(UN3$Pop) + power.change + UN3$Purban + UN3$Fertility)
+
+plot(m4)
+
+ggpairs(data.frame(
+  outcome = power.y, 
+  PPgdp = log(UN3$PPgdp),
+  FRate = UN3$Frate,
+  Fertility = UN3$Fertility,
+  Pop = log(UN3$Pop),
+  Change = power.change),
+  Purban = UN3$Purban)
+  
+
+m5 <- lm(power.y ~ log(UN3$PPgdp) + UN3$Frate + log(UN3$Pop) + power.change + UN3$Purban + UN3$Fertility)
+
+summary(m5)
+
+plot(m5)
+```
+
+Q-Q plot of this model shows that standardized residuals are still not normally distributed.  Looking at the distributions of the predictors, this may be due to the skewed distribution of Fertility or the skewed distribution of the power transformed Change variable.  I log the Fertility variable and run a new model.  The new QQ plot shows the standardized residuals are still below their theoretical quantiles at the right tail of the distribution. 
+
 
 9. Start by finding the best transformation of the response and then find transformations of the predictors.  Do you end up with a different model than in 8?
 
 
 ```{r}
+bc2 <- MASS::boxcox(ModernC ~ ., data = UN3)
+lambda.y2 <- bc2$x[which.max(bc2$y)]
+power.y2 <- (UN3$ModernC^lambda.y2 - 1)/lambda.y2
 
+pm4 <- car::boxTidwell(power.y2 ~ Change2, ~ log(Pop) + log(PPgdp) + Purban, data = UN3)
+
+car::boxTidwell(power.y2 ~ Frate, ~ PPgdp + Change + Pop, data = UN3)
+
+lambda.change2 <- pm4$result[1,1]
+power.change2 <- (UN3$Change2^lambda.change2 - 1)/lambda.change2
+
+UN3$power.change2 <- power.change2
+UN3$power.y2 <- power.y2
+m7 <- lm(power.y2 ~ power.change2 + log(Pop) + log(PPgdp) + Fertility + Frate + Purban, data = UN3)
+summary(m7)
 ```
 
 10.  Are there any outliers or influential points in the data?  Explain.  If so, refit the model after removing any outliers and comment on residual plots.
 
+The avplots show that China and India are possible outliers that may be positively influencing the effect of population, which was found by the latest model to be positively and significantly associated with the outcome. I refit the model removing these potentially influential points. 
+
+I also check for influential outliers by taking the studentized residual of each observation and calculating the probability of getting a studentized residual at least as large from the appropriate t-distribution.  None of the observations have studentized residuals large enough to reject the null hypothesis that these observations came from the same distribution (using the Bonferroni cutoff of .05/n).  Nonetheless, I remove the three observations with the lowest associated probabilities to assess the affect of removing outliers from the data.  These three localities are Poland, Cook Islands, and Azerbaijan.  Although these localities have low Cook's distance, they are among the 20 localities in the data with the highest Cook's distance. 
 
 ```{r}
+car::avPlots(m7, id = list(method=list(abs(residuals(m7, type="pearson")), "x"), n=4, cex=1, col=carPalette()[1], location="lr"))
 
+pval <- 2*(1 - pt(abs(rstudent(m7)), m7$df -1))
+pval[pval < .025]
+
+cooks.distance(m7)[cooks.distance(m7) > .02]
+
+m8 <- lm(power.y2 ~ power.change2 + log(Pop) + log(PPgdp) + Fertility + Frate + Purban, data = UN3[!(row.names(UN3) %in% c("China", "India", "Azerbaijan", "Poland", "Nicaragua")),])
+
+summary(m8)
 ```
+
+The results of the model are not substantially changed by removing these observations.  Unsurprisingly, the fit of the model is improved, with the Adjusted R-squared increasing from about .61 to about .66.  The only statistically significant coefficients are still the coefficients on Population, PPgdp, and Fertility, with Population and PPgdp having positive effects and Fertility having a negative effect.
 
 ## Summary of Results
 
@@ -103,22 +205,85 @@ on your findings regarding trying to predict `ModernC` from the other variables.
 
 
 ```{r}
+m9 <- lm(ModernC ~ log(Pop) + log(PPgdp) + Fertility + Frate, data = UN3)
+
+thing2 <- rbind(c(summary(m9)$coefficients[1,1], summary(m9)$coefficients[1,1] + qt(.975, m9$df - 1)*summary(m9)$coefficients[1,2], summary(m9)$coefficients[1,1] - qt(.975, m9$df - 1)*summary(m9)$coefficients[1,2]),
+c(summary(m9)$coefficients[2,1], summary(m9)$coefficients[2,1] + qt(.975, m9$df - 1)*summary(m9)$coefficients[2,2], summary(m9)$coefficients[2,1] - qt(.975, m9$df - 1)*summary(m9)$coefficients[2,2]),
+c(.01*summary(m9)$coefficients[3,1], .01*summary(m9)$coefficients[3,1] + qt(.975, m9$df - 1)*.01*summary(m9)$coefficients[3,2], .01*summary(m9)$coefficients[3,1] - qt(.975, m9$df - 1)*.01*summary(m9)$coefficients[3,2]),
+c(summary(m9)$coefficients[4,1], summary(m9)$coefficients[4,1] + qt(.975, m9$df - 1)*summary(m9)$coefficients[4,2], summary(m9)$coefficients[4,1] - qt(.975, m9$df - 1)*summary(m9)$coefficients[4,2]),
+c(summary(m9)$coefficients[5,1], summary(m9)$coefficients[5,1] + qt(.975, m9$df - 1)*summary(m9)$coefficients[5,2], summary(m9)$coefficients[5,1] - qt(.975, m9$df - 1)*summary(m9)$coefficients[5,2]))
+
+rownames(thing2) <- c("Intercept", " Log Population", "Log Per Capita GDP", "Fertility", "Frate")
+colnames(thing2) <- c("Mean", "Upper Bound", "Lower Bound")
+knitr::kable(thing2, row.names=T, digits=2)
 
 ```
+
+For the final model, I use the untransformed outcome variable.  Using this outcome will make interpretation of the coefficients easier.  Moreover, Box Cox had estimated about .79 as the optimal lambda for a power transformation of y.  This is close to 1, a lambda value indicating that the outcome should be left untransformed.  More importantly, the residual vs. fitted value plots for the model with a transformed outcome and a model with an untransformed outcome show that power tranforming y doesn't substantially improve the linearity with which the predictors are associated with the outcome.  Finally, the model fit is only marginally improved by power transforming y.
+
+Additionally, I include all observations in the final model.  Although this naturally lowers the model fit, an examination of studentized residuals and Cook's distance measures suggests that none of the observations on which these models are based change the coefficents more than what we would expect from random variation.
+
+Finally, I removed Change and Purban variables from the model, both of which were shown clearly in previous analyses to not be associated with the outcome when controlling for the other predictors.  
+
+The table above shows that a 1% increase in country population (in the hundred thousands - I chose not to multiply the coefficient by .01 for clarity of interpretation) is associated with a 1.72% increase in the percentage of women using a contraceptive.  This effect is statistically significant, with 95% confidence interval with a lower bound of .48% and an upper bound of 2.96%.  Furthermore, a 1% increase in a country's Per Capita GDP is associated with a .05 increase in percentage of women using contraception, on average.  The 95% confidence interval for this effect is .03-.07%.  The effect of a one-unit increase in the fertility rate on the average percent of women using contraception is -6.32%, with a confidence interval of -8.49 to -4.14.  Finally, a one-unit increase in the percent of females over 15 that are economically active is associated with a .16 increase in the percent of women who use a contraceptive, with a confidence interval of .01 to .3.
 
 
 12. Provide a paragraph summarizing your final model  and findings suitable for the US envoy to the UN after adjusting for outliers or influential points.   You should provide a justification for any case deletions in your final model
 
 
 ```{r}
-
+summary(m9)
 ```
 
+For my final model, I chose to include all of the complete cases in the data.  My reason for making this choice is that none of the localities were identified as outliers, either according to Cook's distance or to tests on their studentized residuals.  Although certain localities, such as Poland and Azerbaijan, have values on the oucome variable that deviate from the values predicted by the model, these deviations do not exceed what can reasonably be expected by the variation of the t-distribution to which these observations are assumed to belong.  
+
+The main effects to notice in the final model are the substantively significant positive effects of Population and Per Capita GDP on contraceptive use.  These effects suggest that country size and development may matter in some way for prevalence of contraceptive use, although the causal mechanisms through which these predictors are related to the outcome cannot be discerned through this analysis.  Another thing to note is that fertility rate has a large and negative effect on contraceptive use.  This negative association may reflect the causal effect of the outcome on this predictor.  It makes sense that greater access to contraceptive may have an attenuating effect on the fertility rate, but this cannot be determined decisively from this analysis alone.
 
 ## Methodology
 
-    
 13. Prove that the intercept in the added variable scatter plot will always be zero.  _Hint:  use the fact that if $H$ is the project matrix which contains a column of ones, then $1_n^T (I - H) = 0$.  Use this to show that the sample mean of residuals will always be zero if there is an intercept._
 
+$e_{y} = \hat\beta_{0} + \hat\beta_{1}e_{x}$
 
-14. For multiple regression with more than 2 predictors, say a full model given by `Y ~ X1 + X2 + ... Xp`   we create the added variable plot for variable `j` by regressing `Y` on all of the `X`'s except `Xj` to form `e_Y` and then regressing `Xj` on all of the other X's to form `e_X`.  Confirm that the slope in a manually constructed added variable plot for one of the predictors  in Ex. 10 is the same as the estimate from your model. 
+The equation above represents a regression of the values created from an added variable plot.  The outcome variable is the residuals from a regression of y on some predictor, say, x1.  $e_{x}$ is the residuals from a regression of x1 on x2.  The above equation can be rewritten with orthogonal projection matrices.  When the complement of the projection matrix is pre-multiplied by the outcome variable in a regression, the result is a vector of the residuals.  Using this insight, the above equation can be rewritten as follows.
+
+$(I - H)y = \hat\beta_{0} + \hat\beta_{1}(I - H)x_{1}$
+
+Next, I rewrite $ \hat\beta_{1}$ in matrix form as $(X'X)^{-1}X'y$, except in place of $X$ I put $(I - H)x_{1}$.  This is the $X$ matrix in the equation above.  In place of $y$ I put $(I - H)y$.    
+
+$(I - H)y = \hat\beta_{0} + [x_{1}'(I - H)'(I - H)x_{1}]^{-1}((I - H)x_{1})'(I - H)y(I - H)x_{1}$
+
+Like the projection matrix, the complement to the projection matrix is idempotent, so I can simplify the equation.
+
+$(I - H)y = \hat\beta_{0} + [x_{1}'(I - H)x_{1}]^{-1}x_{1}'(I - H)y(I - H)x_{1}$
+
+By multiplying both sides of the equation by $x_{1}'$, I can simplify the equation further.  $[x_{1}(I - H)'(I - H)x_{1}]^{-1}$ and $x_{1}'(I - H)y$ are scalars which can be moved around.
+
+$x_{1}'(I - H)y = x_{1}'\hat\beta_{0} + x_{1}'(I - H)x_{1}[x_{1}'(I - H)x_{1}]^{-1}x_{1}'(I - H)y$
+
+$ x_{1}'(I - H)x_{1}[x_{1}'(I - H)x_{1}]^{-1}$ cancels out.
+
+$x_{1}'(I - H)y = x_{1}'\hat\beta_{0} + x_{1}'(I - H)y$
+
+I subtract $x_{1}'(I - H)y$ from both sides.
+
+$x_{1}'\hat\beta_{0} = 0$
+
+$\sum_{i=1}^{n}x_{1}\hat\beta_{0} = 0$
+
+
+14. For multiple regression with more than 2 predictors, say a full model given by `Y ~ X1 + X2 + ... Xp`   we create the added variable plot for variable `j` by regressing `Y` on all of the `X`'s except `Xj` to form `e_Y` and then regressing `Xj` on all of the other X's to form `e_X`.  Confirm that the slope in the manually constructed added variable plot for one of the predictors  in Ex. 10 is the same as the estimate from your model. 
+
+```{r}
+summary(lm(power.y2 ~ power.change2 + log(Pop) + log(PPgdp) + Fertility + Frate + Purban, data = UN3[!(row.names(UN3) %in% c("China", "India", "Azerbaijan", "Poland", "Nicaragua")),]))
+
+m11 <- lm(power.y2 ~ power.change2 + log(Pop) + log(PPgdp) + Frate + Purban, data = UN3[row.names(UN3) %in% names(m8$residuals),])
+m12 <- lm(Fertility ~ power.change2 + log(Pop) + log(PPgdp) + Frate + Purban, data = UN3[row.names(UN3) %in% names(m8$residuals),])
+
+length(m12$residuals)
+
+lm(m11$residuals ~ m12$residuals)$coef 
+m8$coef[5]
+```
+
+To confirm that the coefficient on one of my predictors for the model I used in Ex. 10 is the same as the slope from a manually constructed av plot for that predictor, I start with my model from Ex. 10.  I am going to create an avplot for the Fertility variable.  Next, I run two regressions to get the residuals from a regression of y on the other predictors ($e_{y}$) and the residuals from a regression of Fertility on the other predictors $e_{x}$.  One thing to note is that R automatically using complete cases when running a linear model.  Because the number of complete cases differs depending on the variables included in the regression equation, I specified in the regressions I ran to get my residuals that I only wanted to use data that were included in the full regression (m8).  Finally, I regressed $e_{y}$ on $e_{x}$.  Note the last two lines of code above.  The slope of the avplot regression, -3.46, equals the coefficient on Fertility in m8. 
