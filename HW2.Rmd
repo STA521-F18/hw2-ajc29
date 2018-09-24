@@ -13,7 +13,6 @@ output:
 
 Readings: Chapters 3-4 in Weisberg Applied Linear Regression
 
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -28,7 +27,6 @@ This exercise involves the UN data set from `alr3` package. Install `alr3` and t
 ```{r data, results="hide", warning=FALSE, message=FALSE}
 library(alr3)
 data(UN3, package="alr3")
-help(UN3) 
 library(car)
 library(ggplot2)
 library(GGally)
@@ -131,10 +129,10 @@ Based on these results, I will transform the y variable using a power transforma
 
 8.  Fit the regression using the transformed variables.  Provide residual plots and added variables plots and comment.  If you feel that you need additional transformations of either the response or predictors, repeat any steps until you feel satisfied.
 
-```{r, warnings = F}
+```{r,, warning = FALSE, message=FALSE}
 
 m4 <- lm(power.y ~ log(UN3$PPgdp) + UN3$Frate + log(UN3$Pop) + power.change + UN3$Purban + UN3$Fertility)
-
+par(mfrow=c(2,2))
 plot(m4)
 
 ggpairs(data.frame(
@@ -150,7 +148,7 @@ ggpairs(data.frame(
 m5 <- lm(power.y ~ log(UN3$PPgdp) + UN3$Frate + log(UN3$Pop) + power.change + UN3$Purban + UN3$Fertility)
 
 summary(m5)
-
+par(mfrow=c(2,2))
 plot(m5)
 ```
 
@@ -239,6 +237,7 @@ For my final model, I chose to include all of the complete cases in the data.  M
 
 The main effects to notice in the final model are the substantively significant positive effects of Population and Per Capita GDP on contraceptive use.  These effects suggest that country size and development may matter in some way for prevalence of contraceptive use, although the causal mechanisms through which these predictors are related to the outcome cannot be discerned through this analysis.  Another thing to note is that fertility rate has a large and negative effect on contraceptive use.  This negative association may reflect the causal effect of the outcome on this predictor.  It makes sense that greater access to contraceptive may have an attenuating effect on the fertility rate, but this cannot be determined decisively from this analysis alone.
 
+
 ## Methodology
 
 13. Prove that the intercept in the added variable scatter plot will always be zero.  _Hint:  use the fact that if $H$ is the project matrix which contains a column of ones, then $1_n^T (I - H) = 0$.  Use this to show that the sample mean of residuals will always be zero if there is an intercept._
@@ -249,7 +248,7 @@ The equation above represents a regression of the values created from an added v
 
 $(I - H)y = \hat\beta_{0} + \hat\beta_{1}(I - H)x_{1}$
 
-Next, I rewrite $ \hat\beta_{1}$ in matrix form as $(X'X)^{-1}X'y$, except in place of $X$ I put $(I - H)x_{1}$.  This is the $X$ matrix in the equation above.  In place of $y$ I put $(I - H)y$.    
+Next, I rewrite $\hat\beta_{1}$ in matrix form as $(X'X)^{-1}X'y$, except in place of $X$ I put $(I - H)x_{1}$.  This is the $X$ matrix in the equation above.  In place of $y$ I put $(I - H)y$.    
 
 $(I - H)y = \hat\beta_{0} + [x_{1}'(I - H)'(I - H)x_{1}]^{-1}((I - H)x_{1})'(I - H)y(I - H)x_{1}$
 
@@ -261,7 +260,7 @@ By multiplying both sides of the equation by $x_{1}'$, I can simplify the equati
 
 $x_{1}'(I - H)y = x_{1}'\hat\beta_{0} + x_{1}'(I - H)x_{1}[x_{1}'(I - H)x_{1}]^{-1}x_{1}'(I - H)y$
 
-$ x_{1}'(I - H)x_{1}[x_{1}'(I - H)x_{1}]^{-1}$ cancels out.
+$x_{1}'(I - H)x_{1}[x_{1}'(I - H)x_{1}]^{-1}$ cancels out.
 
 $x_{1}'(I - H)y = x_{1}'\hat\beta_{0} + x_{1}'(I - H)y$
 
